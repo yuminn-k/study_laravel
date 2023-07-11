@@ -31,7 +31,13 @@
     - [라라벨 홈스테드](#라라벨-홈스테드)
       - [VirtualBox](#virtualbox)
       - [Vagrant](#vagrant)
+      - [laravel/homestead](#laravelhomestead)
+      - [프로비저닝](#프로비저닝)
+    - [라라벨 디버그바](#라라벨-디버그바)
   - [인증](#인증)
+    - [데이터베이스](#데이터베이스)
+      - [설정](#설정-1)
+      - [마이그레이션](#마이그레이션)
   - [커뮤니티](#커뮤니티)
   - [레벨업](#레벨업)
   - [RESTful API](#restful-api)
@@ -781,12 +787,373 @@ Vagrant 2.3.4
 Vagrant의 설치가 끝나면 라라벨을 위해 Homestead Box를 추가해야 합니다. 아래의 명령어를 입력하여 라라벨 홈스테드를 위한 Box를 추가합시다. Box를 설치할 때 사용할 가상머신 소프트웨어는 VirtualBox를 선택하면 됩니다.
 
 ```bash
+$ vagrant box add laravel/homestead --box-version=13.0.0
+==> box: Loading metadata for box 'laravel/homestead'
+    box: URL: https://vagrantcloud.com/laravel/homestead
+This box can work with multiple providers! The providers that it
+can work with are listed below. Please review the list and choose
+the provider you will be working with.
 
+1) parallels
+2) virtualbox
+3) vmware_desktop
+
+Enter your choice: 2
 ```
+
+Vagrant Box를 추가한 다음, 아래와 같이 입력하면 Box가 있는지 확인할 수 있습니다.
+
+```bash
+$ vagrant box list
+laravel/homestead (virtualbox, 13.0.0)
+```
+
+#### laravel/homestead
+
+홈스테드의 [깃허브 레포지토리](https://github.com/laravel/homestead)를 복사합시다. 아래의 명령어를 실행하면 홈 디렉터리에 Homestead 폴더가 생성됩니다. Homestead 폴더로 들어가서 v14.2.2 브랜치로 변경합시다. 홈스테드 공식문서에는 release 브랜치로 변경하라고 되어 있지만 버전 일관성 유지를 위해 v14.2.2에 해당하는 버전을 사용합니다.
+
+```bash
+$ git clone https://github.com/laravel/homestead.git ~/homestead
+$ cd ~/homestead
+
+$ git checkout tags/v14.2.2 -b v14.2.2
+```
+
+홈스테드의 전반적인 설정을 구성하기 위한 파일을 생성해야 하는데, 현재 운영체제에 따라 쉘스크립트 또는 배치 스크립트를 실행하면 Homestead.yaml이 생성됩니다. Homestead.yaml에서 가상머신에서 할당할 자원 또는 로컬과 가상머신 사이의 프로젝트 매핑 경로를 지정할 수 있습니다.
+
+```bash
+// macOS / Linux...
+$ bash init.sh
+// Windows
+
+$ ./init.bat
+```
+
+`Homestead.yaml`의 주요 내용을 살펴봅시다. ip, memory, cpus는 각각 가상머신에 할당할 ip 주소, 메모리, CPU를 의미하며 provider는 홈스테드에 사용할 가상머신 소프트웨어의 이름입니다. virtualbox를 사용합니다. authorize, keys는 가상머신에서 SSH 접속에 인증하기 위해 사용되는 공개키, 비밀키 키페어(Key-Pair)입니다.
+
+`folders.map`은 로컬 프로젝트의 위치를 의미합니다. folders는 가상머신 내부에 매핑될 프로젝트 경로입니다. `folders.map`에 변경점이 있다면 가상머신의 folders.to도 갱신됩니다. `sites.map`은 프로젝트에 사용할 도메인을 의미하며 `sites.to`에는 해당 도메인에서 사용할 Document Root를 지정합니다. 따라서 `homestead.test`의 Document Root는 `/home/vagrant/code/public`이 됩니다.
+
+`databases`는 가상머신에서 사용할 `database`의 이름을 의미하고, `features`에는 추가적으로 설치할 소프트웨어를 지정해줄 수 있으며 mysql 대신에 mariadb를 사용하는 것도 가능합니다. `services`에서는 활성화할 서비스와 비활성화할 서비스를 지정해줄 수 있습니다. `Homestead.yml`이 아래의 내용과 일치하는지 확인해줍시다. 더 사용 가능한 `features`, `services`는 공식문서에서 자세히 확인할 수 있습니다.
+
+```bash
+ip: "192.168.56.56"
+memory: 2048
+cpus: 2
+provider: virtualbox
+
+authorize: ~/.ssh/id_rsa.pub
+
+keys:
+    - ~/.ssh/id_rsa
+
+folders:
+    - map: ~/code
+      to: /home/vagrant/code
+
+sites:
+    - map: homestead.test
+      to: /home/vagrant/code/public
+
+databases:
+    - homestead
+
+features:
+    - mysql: true
+    - mariadb: false
+    - postgresql: false
+    - ohmyzsh: false
+    - webdriver: false
+    - meilisearch: false
+
+services:
+    - enabled:
+        - "mysql"
+    - disabled:
+        - "postgresql@11-main"
+```
+
+#### 프로비저닝
+
+이제 Vagrant를 사용하여 가상환경을 만들어봅시다. 터미널에 `vagrant up`을 입력하면 가상머신이 생성되면서 구성 작업이 시작됩니다. 이 과정에서 에러를 만난다면, 경우의 수가 다소 많은 편인데, 이러한 경우 Vagrant, Vagrant laravel/homestead Box, VirtualBox, laravel/homestead를 삭제하고 최신버전으로 설치하거나 공식문서 등을 통해 이미 설치된 버전의 호환성을 확인하는 과정이 필요합니다.
+
+그 외에도 네트워크 설정 때문에 발생하거나 SSH 키를 불러오지 못해서 발생하는 문제 등이 있을 수 있습니다. 모든 경우에 대해 이야기할 수는 없기 때문에 에러 메시지를 살펴보고 그를 토대로 검색을 통해 해결해봅시다. 라라벨 홈스테드의 경우 버전이 바뀜에 따라 설치과정에서 에러가 발생하는 경우가 종종 있으므로 [이슈](https://github.com/laravel/homestead/issues)를 살펴보면 큰 도움이 됩니다.
+
+```bash
+$ vagrant up
+Bringing machine 'homestead' up with 'virtualbox' provider...
+```
+
+가상머신의 구성이 끝났으면 `Homestead.yaml`의 ip에 지정되어 있던 주소인 192.168.56.56으로 접속해 봅시다. `php artisan serve`로 실행했었던 화면과 동일한 모습을 볼 수 있습니다. 만약 `homestead.test` 주소로 접속해보고 싶다면 `hosts` 파일에서 아래와 같이 설정합시다. 맥과 리눅스에서는 `/etc/hosts`, 윈도우에서는 `C:/Windows/System32/drivers/etc/hosts`에서 설정하면 됩니다.
+
+```bash
+192.168.56.56 homestead.test
+```
+
+홈스테드로 작업을 하다 보면 데이터베이스 마이그레이션 작업과 같이 가상머신 내부로 접속하여 작업을 해야 하는 순간이 있는데, 그럴 때 ssh로 접속을 해야 할 필요가 있습니다. 이때에는 `vagrant ssh`를 통해 간단하게 접속할 수 있습니다.
+
+```bash
+$ vagrant ssh
+vagrant@homestead:~$
+```
+
+이제 프로젝트로 돌아와서 `.env`를 열고 hosts 파일을 수정했던 것처럼 APP_URL를 `http://homestead.test`로 바꿔줄 필요가 있습니다.
+
+```bash
+APP_URL=http://homestead.test
+```
+
+### 라라벨 디버그바
+
+[라라벨 디버그바](https://github.com/barryvdh/laravel-debugbar)는 라라벨 프레임워클르 사용하여 어플리케이션을 구성할 때 쿼리, 뷰, 라우트, 이벤트 등 개발자에게 도움이 되는 다양한 정보를 화면상에 표시해주는 패키지입니다. 라라벨 디버그바는 라라벨을 사용하여 개발할 때 필수적으로 사용되는 도구입니다. 따라서 우리도 프로젝트의 코드를 구성하기 전에 디버그바를 설치해봅시다.
+
+```bash
+$ composer require barryvdh/laravel-debugbar
+
+"require-dev": {
+    "barryvdh/laravel-debugbar": "^3.8"
+}
+```
+
+이후 `php artisan vendor:publish`를 사용하여 디버그바의 설정 파일을 복사합니다. `php artisan vendor:publish` 명령어를 사용하면 외부 라이브러리에서 제공하는 설정과 블레이드 템플릿 등을 로컬 프로젝트로 퍼블리싱할 수 있습니다.
+
+p.72
 
 ## 인증
 
-> 
+> 인증 서비스에서는 라라벨에서 제공하는 기능의 가장 기본적인 부분인 데이터베이스와 마이그레이션, 모델, 모델 팩토리와 시딩, 쿼리빌더와 엘로퀀트 ORM, 관계(중간에 짝짓는 게 아니라면 다 쉼표 처리)와 같은 내용들을 간단하게 익히게 되고, 이후 커뮤니티 구현에서는 이들이 제공하는 조금 더 복잡한 기능을 사용하게 될 예정입니다. 따라서 인증 서비스에서 배우는 내용은 가장 기본이 되는 부분이므로 반드시 익혀둡시다.
+> 우리가 만들어볼 인증은 과거로부터 사용하던 아이디와 패스워드를 사용한 수동 인증에서부터 Laravel Socialite를 통해 구글, 페이스북, 깃허브 등의 SNS 서비스의 정보를 사용하여 로그인하는 소셜 로그인까지 구현해봅니다. 소셜 로그인의 경우 대부분 비슷하기 때문에 깃허브 로그인으로만 구성해볼 예정입니다.
+
+### 데이터베이스
+
+라라벨에서 제공하는 마이그레이션, 모델, 모델 팩토리, 시딩, 엘로퀀트 ORM 기능을 알아보도록 합시다. 워크 플로우에 따라 다르겠지만, 지금은 데이터베이스 테이블을 먼저 구성하고 소스 코드 작성을 시작하고자 합니다. DBMS로는 MySQL을 사용합니다.
+
+#### 설정
+
+라라벨 프로젝트에서 MySQL 데이터베이스에 연결하는 방법은 간단합니다. 먼저 `config/database.php` 파일을 살펴봅시다. 이 파일에는 어플리케이션이 기본적으로 연결할 데이터베이스와 포트, 유저 이름 등의 정보가 나열되어 있습니다. 여기서 MySQL에 대한 것과 기본 연결 설정 등을 살펴봅시다.
+
+```php
+<?php
+
+use Illuminate\Support\Str;
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Database Connection Name
+    |--------------------------------------------------------------------------
+    |
+    | Here you may specify which of the database connections below you wish
+    | to use as your default connection for all database work. Of course
+    | you may use many connections at once using the Database library.
+    |
+    */
+
+    'default' => env('DB_CONNECTION', 'mysql'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Database Connections
+    |--------------------------------------------------------------------------
+    |
+    | Here are each of the database connections setup for your application.
+    | Of course, examples of configuring each database platform that is
+    | supported by Laravel is shown below to make development simple.
+    |
+    |
+    | All database work in Laravel is done through the PHP PDO facilities
+    | so make sure you have the driver for your particular database of
+    | choice installed on your machine before you begin development.
+    |
+    */
+
+    'connections' => [
+
+        'sqlite' => [
+            'driver' => 'sqlite',
+            'url' => env('DATABASE_URL'),
+            'database' => env('DB_DATABASE', database_path('database.sqlite')),
+            'prefix' => '',
+            'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
+        ],
+
+        'mysql' => [
+            'driver' => 'mysql',
+            'url' => env('DATABASE_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => env('DB_DATABASE', 'forge'),
+            'username' => env('DB_USERNAME', 'forge'),
+            'password' => env('DB_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
+        'pgsql' => [
+            'driver' => 'pgsql',
+            'url' => env('DATABASE_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'forge'),
+            'username' => env('DB_USERNAME', 'forge'),
+            'password' => env('DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => 'prefer',
+        ],
+
+        'sqlsrv' => [
+            'driver' => 'sqlsrv',
+            'url' => env('DATABASE_URL'),
+            'host' => env('DB_HOST', 'localhost'),
+            'port' => env('DB_PORT', '1433'),
+            'database' => env('DB_DATABASE', 'forge'),
+            'username' => env('DB_USERNAME', 'forge'),
+            'password' => env('DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            // 'encrypt' => env('DB_ENCRYPT', 'yes'),
+            // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
+        ],
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Migration Repository Table
+    |--------------------------------------------------------------------------
+    |
+    | This table keeps track of all the migrations that have already run for
+    | your application. Using this information, we can determine which of
+    | the migrations on disk haven't actually been run in the database.
+    |
+    */
+
+    'migrations' => 'migrations',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Redis Databases
+    |--------------------------------------------------------------------------
+    |
+    | Redis is an open source, fast, and advanced key-value store that also
+    | provides a richer body of commands than a typical key-value system
+    | such as APC or Memcached. Laravel makes it easy to dig right in.
+    |
+    */
+
+    'redis' => [
+
+        'client' => env('REDIS_CLIENT', 'phpredis'),
+
+        'options' => [
+            'cluster' => env('REDIS_CLUSTER', 'redis'),
+            'prefix' => env('REDIS_PREFIX', Str::slug(env('APP_NAME', 'laravel'), '_').'_database_'),
+        ],
+
+        'default' => [
+            'url' => env('REDIS_URL'),
+            'host' => env('REDIS_HOST', '127.0.0.1'),
+            'username' => env('REDIS_USERNAME'),
+            'password' => env('REDIS_PASSWORD'),
+            'port' => env('REDIS_PORT', '6379'),
+            'database' => env('REDIS_DB', '0'),
+        ],
+
+        'cache' => [
+            'url' => env('REDIS_URL'),
+            'host' => env('REDIS_HOST', '127.0.0.1'),
+            'username' => env('REDIS_USERNAME'),
+            'password' => env('REDIS_PASSWORD'),
+            'port' => env('REDIS_PORT', '6379'),
+            'database' => env('REDIS_CACHE_DB', '1'),
+        ],
+
+    ],
+
+];
+```
+
+데이터베이스에 대한 설정은 `config/database.php`에서 할 수 있고, `.env`와 연동되는 사항으로는 `DB_*`이 있다는 점을 알 수 있습니다. 또한 디폴트 연결 드라이버로 mysql이 설정되어 있습니다. 따라서 데이터베이스의 기본적인 부분은 직접 설정 파일을 건드리는 것이 아니라 `.env`에서 `DB_*`의 값을 바꿔주는 것으로 해결하는 것이 바람직합니다.
+
+라라벨 홈스테드에 대한 데이터베이스 설정은 username과 database가 homestead이며 password는 secret입니다. 이 부분은 반드시 체크해줍시다. 라라벨 텔레스코프에서 이미 지정한 바 있다면 그냥 넘어가도 됩니다.
+
+```
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=certification
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+환경설정만 바꿔주면 어플리케이션이 부팅되면서 알아서 데이터베이스에 연결해주므로 그 이외에 해주어야 하는 일은 없습니다. MySQL 데이터베이스를 직접 살펴보고 싶다면 `vagrant ssh`를 통해 가상머신에 연결합시다. 데이터베이스에 대한 작업은 대부분 SSH가 접속된 상태에서 진행되므로 연결을 유지해둡시다.
+
+```bash
+vagrant@homestead:~$ mysql
+```
+
+`Homestead.yaml`에서 정의한 데이터베이스가 잘 생성되었는지 확인해보기 위해 `show databases;` 쿼리를 입력해보면 데이터베이스가 있는 것을 볼 수 있습니다.
+
+#### 마이그레이션
+
+가상머신에서 MySQL 데이터베이스에 연결하여 테이블을 생성할 필요 없이 라라벨에서는 마이그레이션(Migration)이라는 기능을 제공합니다. 마이그레이션을 사용하면 SQL을 하드코딩하는 대신 PHP 코드로 사용하여 데이터베이스 스키마를 조작할 수 있으며 테이블을 생성하거나 속성을 추가, 삭제하는 등의 작업을 처리할 수 있습니다.
+
+마이그레이션 파일은 `database/migrations`에서 확인할 수 있고, 기본적으로 `users` 테이블의 생성을 포함하는 마이그레이션이 작성되어 있습니다. `create_users_table.php` 파일을 보면 `use Illuminate\Database\Migrations\Migration`을 상속하는 익명클래스에서 `up()`, `down()`을 가지고 있음을 알 수 있습니다. 이는 `users` 테이블을 생성하기 위한 마이그레이션입니다.
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->rememberToken();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('users');
+    }
+};
+```
+`up()`은 데이터베이스에 마이그레이션을 진행할 때 실행하는 메서드입니다. 일반적으로 작성되는 코드는 테이블을 생성하거나 테이블에 속성을 추가・삭제하는 등의 수정사항입니다. 우리가 가장 많이 하게 될 일은 테이블을 생성하는 일이 될 것입니다.
+
+`down()`은 롤백(Rollback)을 위해 동작하는 코드라고 생각하면 이해하기 좋습니다. 예를 들어 `up()`에서 `Schema::create()`를 사용하여 테이블을 생성하는 모습을 볼 수 있고, 콜백함수의 파라미터에 Blueprint가 있는 것을 볼 수 있습니다. 이를 사용하면 테이블의 속성을 정의하고, 기본키, 외래키와 같은 것들을 설정할 수 있습니다. `down()`에서는 `dropIfExists()`를 통해 주어진 테이블이 존재하는 경우 삭제할 것을 지시하고 있습니다.
+
+마이그레이션에는 `rememberToken()`, `timestamps()`와 같이 라라벨에서 자주 사용되는 별도의 메서드로 정의가 되어있는데, `rememberToken()`은 `varchar(100): remember_token`, `timestamps()`는 `timestamp: created_at, updated_at` 속성을 의미합니다.
+
+이제 남은 일은 가상머신에서 마이그레이션을 처리하는 일입니다. `php artisan migrate`를 실행합시다. 마이그레이션을 실행하면 `up()` 메서드에 정의한대로 동작합니다. 마이그레이션 또한 라라벨 텔레스코프에서 진행했다면 이미 users 테이블도 데이터베이스에 생성되어 있을 것입니다.
+
 
 ## 커뮤니티
 
