@@ -38,6 +38,10 @@
     - [데이터베이스](#데이터베이스)
       - [설정](#설정-1)
       - [마이그레이션](#마이그레이션)
+      - [모델](#모델-1)
+      - [모델 팩토리](#모델-팩토리)
+      - [시딩](#시딩)
+      - [쿼리빌더](#쿼리빌더)
   - [커뮤니티](#커뮤니티)
   - [레벨업](#레벨업)
   - [RESTful API](#restful-api)
@@ -1148,11 +1152,263 @@ return new class extends Migration
 ```
 `up()`은 데이터베이스에 마이그레이션을 진행할 때 실행하는 메서드입니다. 일반적으로 작성되는 코드는 테이블을 생성하거나 테이블에 속성을 추가・삭제하는 등의 수정사항입니다. 우리가 가장 많이 하게 될 일은 테이블을 생성하는 일이 될 것입니다.
 
-`down()`은 롤백(Rollback)을 위해 동작하는 코드라고 생각하면 이해하기 좋습니다. 예를 들어 `up()`에서 `Schema::create()`를 사용하여 테이블을 생성하는 모습을 볼 수 있고, 콜백함수의 파라미터에 Blueprint가 있는 것을 볼 수 있습니다. 이를 사용하면 테이블의 속성을 정의하고, 기본키, 외래키와 같은 것들을 설정할 수 있습니다. `down()`에서는 `dropIfExists()`를 통해 주어진 테이블이 존재하는 경우 삭제할 것을 지시하고 있습니다.
+`down()`은 롤백(Rollback)을 위해 동작하는 코드라고 생각하면 이해하기 좋습니다. 예를 들어 `up()`에서 테이블을 생성했다면, `down()`에서는 테이블을 삭제하는 코드를 넣습니다. 마이그레이션을 롤백하는 `php artisan migrate:rollback`과 같은 명령을 사용할 때 호출됩니다.
 
-마이그레이션에는 `rememberToken()`, `timestamps()`와 같이 라라벨에서 자주 사용되는 별도의 메서드로 정의가 되어있는데, `rememberToken()`은 `varchar(100): remember_token`, `timestamps()`는 `timestamp: created_at, updated_at` 속성을 의미합니다.
+라라벨에서는 관례에 따라 테이블의 이름은 단수가 아닌 복수형으로 사용합니다. `up()`에서 `Schema::create()`를 사용하여 테이블을 생성하는 모습을 볼 수 있고, 콜백함수의 파라매터에 Blueprint가 있는 것을 볼 수 있습니다. 이를 사용하면 테이블의 속성을 정의하고, 기본키, 외래키와 같은 것들을 설정할 수 있습니다. `down()`에서는 `dropIfExists()`를 통해 주어진 테이블이 존재하는 경우 삭제할 것을 지시하고 있습니다.
 
-이제 남은 일은 가상머신에서 마이그레이션을 처리하는 일입니다. `php artisan migrate`를 실행합시다. 마이그레이션을 실행하면 `up()` 메서드에 정의한대로 동작합니다. 마이그레이션 또한 라라벨 텔레스코프에서 진행했다면 이미 users 테이블도 데이터베이스에 생성되어 있을 것입니다.
+마이그레이션에는 `rememberToken()`, `timestamps()`와 같이 라라벨에서 자주 사용되는 별도의 메서드로 정의가 되어 있는데, `rememberToken()`은 varchar(100): remember_token, `timestamps()`는 timestamp: created_at, updated_at 속성을 의미합니다.
+
+#### 모델
+
+모델(Model)은 사용자에게 나타내고자 하는 데이터로서, 코드상으로는 하나의 데이터베이스 테이블에 대해 클래스로 매핑한 것을 의미합니다. 이 책에서는 타 프레임워크에서 자주 등장하는 용어인 DAO(Data Access Object), DTO(Data Transfer Object)라는 말은 일체 사용하지 않을 것이고 오직 모델이라는 표현만 사용할 것입니다.
+
+예를 들어 users 테이블에 대한 모델은 User 클래스로 표현할 수 있고, 하나의 User 인스턴스는 users 테이블에서 하나의 레코드에 대응될 수 있습니다. 이렇게 얻은 모델은 외래키를 사용하여 다른 테이블의 레코드를 조회하는 등의 일도 할 수 있습니다. 모델에 존재하는 메서드들을 호출하면 데이터를 추가하고, 삭제, 갱신 등의 작업을 손쉽게 할 수 있게 됩니다.
+
+User 모델은 아키텍처를 이야기할 때 다루었지만, 다시 한번 살펴봅시다. User 모델의 경우 `Illuminate\Foundation\Auth\User(as Authenticatable)`를 상속하고, 이 클래스는 `Illuminate\Database\Eloquent\Model`을 상속하면서 모델임을 나타내고 있음을 살펴본 적이 있을 것입니다.
+
+```php
+<?php
+
+namespace App\Models;
+
+// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+
+class User extends Authenticatable
+{
+    use HasApiTokens, HasFactory, Notifiable;
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+    ];
+
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var array<int, string>
+     */
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+    ];
+}
+```
+
+User 모델에 쓰인 프로퍼티를 살펴보면, `User::$fillable`은 User 모델을 통해 데이터베이스에 레코드를 추가할 때, 명시적으로 추가할 수 있는 필드를 의미합니다. `User::$hidden`은 드러나지 않아야 할 필드를 의미하며 User 모델을 조회할 때 나타나지 않습니다. 마지막으로 `User::$casts`는 특정 칼럼이 Datetime으로 캐스팅되도록 처리합니다. 라라벨에서는 날짜에 대한 라이브러리로 [카본](https://carbon.nesbot.com)을 사용하는데, $casts에 칼럼을 datetime으로 지정하면 자동으로 카본 인스턴스로 바뀌게 되어 메서드를 사용할 수 있게 됩니다.
+
+모델은 또한 데이터베이스 테이블의 필드와 매핑된다고도 하였으므로 명시적으로 선언되지는 않았지만, User를 사용하여 $user->name, $user->email과 같이 접근할 수 있게 됩니다. 이러한 아이디어는 매직 메서드 중 하나인 `__get()`을 살펴보면 대략적으로 짐작이 가능합니다.
+
+#### 모델 팩토리
+
+대부분의 어플리케이션을 제작하려면 먼저 실제 유저 데이터와 비슷한 더미 데이터가 필요합니다. 이러한 더미 데이터를 직접 하나씩 입력한다는 것은 상당한 시간 낭비에 속하고 데이터베이스를 초기화할 때마다 다시 데이터를 지정해야 하는 번거로움도 생깁니다. 라라벨에서는 모델을 사용해 더미 데이터를 생성하는 모델 팩토리(Model Factory)와 이것으로 생성된 더미 데이터를 데이터베이스에 심는 시딩(Seeding)이라는 기능을 제공합니다.
+
+모델 팩토리는 데이터를 생성해주고 시더(Seeder)는 생성된 데이터를 가지고 데이터베이스에 심습니다. 모델 팩토리를 사용하면 모델 생성 시 더미 데이터가 채워진 상태로 생성할 수도 있는데, 우리가 실질적으로 작성할 코드는 더미 데이터가 어떻게 채워질지를 정의하는 것이라고 볼 수 있습니다. 이렇게 정의한 모델 팩토리는 일반적으로 시더에서 호출됩니다.
+
+모델 팩토리는 `database/factories`에서, 시더는 `database/seeders`에서 관리됩니다. User 모델을 생성하기 위한 모델 팩토리를 살펴봅시다. 프로젝트 생성 시 미리 작성되어 있으며 `Database\Factories\UserFactory`입니다.
+
+```php
+<?php
+
+namespace Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
+
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
+ */
+class UserFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            'name' => fake()->name(),
+            'email' => fake()->unique()->safeEmail(),
+            'email_verified_at' => now(),
+            'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password
+            'remember_token' => Str::random(10),
+        ];
+    }
+
+    /**
+     * Indicate that the model's email address should be unverified.
+     */
+    public function unverified(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'email_verified_at' => null,
+        ]);
+    }
+}
+```
+
+UserFactory::definition()에서 배열을 반환하면서, fake()->name()와 같이 더미 데이터를 넣는 모습이 보이는데, fake()를 사용하게 되면 랜덤으로 email, name, image 등의 더미 데이터를 생성할 수 있습니다. fake()는 Faker\Generator의 인스턴스를 반환합니다. Faker는 라라벨의 공식 패키지가 아닌 외부의 기능인데, 그저 라라벨에서 사용하고 있는 것뿐입니다. faker에서 어떤 메서드를 사용할 수 있는지는 [공식문서](https://github.com/FakerPHP/Faker)를 통해 확인할 수 있습니다. Faker 덕분에 우리는 라라벨에서 더미 데이터를 보다 손쉽게 생성할 수 있게 되었습니다.
+
+모델 팩토리를 사용하여 더미 모델을 생성하는 일은 간단합니다. 그저 User::factory()를 호출하면 됩니다. User::factory()를 호출하면 UserFactory::definition() 메서드에 정의한 형태에 따라 데이터가 생성됩니다.
+
+```php
+$user = \App\Models\User::factory();
+```
+
+또 한 가지를 보자면 `UserFactory::unverified()`라는 메서드가 작성되어 있는 모습을 볼 수 있는데, 모델 팩토리를 사용하여 모델 생성 시 일부 속성의 상태(States)를 변경해줄 수 있습니다. UserFactory::definition()에서 email_verified_at에 값을 채워 넣을 때 now()를 호출하여 현재 시각에 이메일이 인증된 것으로 간주하는 모습을 볼 수 있지만, UserFactory::unverified()를 사용하면 이메일이 인증되지 않은 유저로도 모델을 생성할 수 있습니다.
+
+```php
+$user = \App\Models\User::factory()->unverified();
+```
+
+#### 시딩
+
+데이터베이스에 데이터를 심어주는 시더에 대해 알아봅시다. 유저에 대한 시더 또한 미리 작성되어 있습니다. 먼저 Database\Seeders\DatabaseSeeder를 살펴봅시다.
+
+
+```php
+<?php
+
+namespace Database\Seeders;
+
+// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    /**
+     * Seed the application's database.
+     */
+    public function run(): void
+    {
+        // \App\Models\User::factory(10)->create();
+
+        // \App\Models\User::factory()->create([
+        //     'name' => 'Test User',
+        //     'email' => 'test@example.com',
+        // ]);
+    }
+}
+```
+
+`DatabaseSeeder:run()` 메서드에서 User::factory()를 실행하고 Factory::create()를 체이닝하여 생성하는 모습을 볼 수 있습니다. 이 코드는 프로젝트 생성 이후 건드리지 않은 코드입니다. User를 10명 생성하고 그에 이어 users 테이블에 레코드를 추가합니다. 생성된 User는 Faker에 의해 랜덤으로 채워진 속성값들이 있을 것입니다.
+
+User::factory() 메서드는 어디에서 온 걸까요? User 모델을 살펴볼 때 HasFactory 트레이트를 포함한 것을 볼 수 있었을 텐데, User::factory() 메서드는 바로 HasFactory가 가지고 있는 것입니다.
+
+`DatabaseSeeder:run()`은 시딩을 실행하는 순간 호출되는 메서드이며 시딩의 진입점(Entry Point) 역할을 하게 됩니다. 진입점에 여러 테이블에 대한 시딩 코드를 작성해도 실행에 문제는 없지만 그렇게 바람직한 것은 아닙니다. 따라서 분리를 해봅시다. 시더를 만들기 위해서는 `php artisan make:seeder` 명령어를 사용합시다.
+
+```bash
+$ php artisan make:seeder UserSeeder
+```
+
+`Database\Seeders\UserSeeder`가 생성되고 `UserSeeder::run()`에 User를 생성하는 코드를 작성할 수 있습니다.
+
+```php
+namespace Database\Seeders;
+
+use App\Models\User;
+use Illuminate\Database\Seeder;
+
+class UserSeeder extends Seeder
+{
+  public function run()
+  {
+    User::factory(10)->create();
+  }
+}
+```
+
+생성된 UserSeeder 클래스는 Illuminate\Database\Seeder를 상속하고 있으며 UserSeeder::run() 메서드를 가지고 있습니다. HasFactory::factory()를 사용하여 10명의 User를 생성하고 있음을 볼 수 있습니다. 여기에서 이메일이 인증되지 않은 User를 생성하고 싶다면 어떻게 해야 할까요? 그럴 때는 팩토리 상태 메서드를 체이닝하여 사용할 수 있습니다. UserFactory::unverified()를 체이닝하여 이메일이 인증되지 않은 1명의 User를 생성합니다.
+
+```php
+User::factory()->unverified()->create();
+```
+
+DatabaseSeeder::run() 메서드에서 약간의 로직을 변경해주면 UserSeeder::run() 메서드를 실행할 수 있습니다. UserSeeder가 실행되도록 바꿔봅시다. $this->call()을 사용하여 시더를 실행할 수 있습니다. 다른 메서드도 있긴 하지만, call() 그리고 매개변수와 함께 호출할 수 있는 callWith() 이외에는 잘 쓰지 않습니다.
+
+```php
+class DatabaseSeeder extends Seeder
+{
+  public function run()
+  {
+    $this->call(UserSeeder::class);
+  }
+}
+```
+
+시더가 완성되어싿면, `php artisan db:seed`라는 명령어로 시딩할 수 있습니다. 만약 마이그레이션과 시딩을 같이 하고 싶다면 `php artisan migrate -seed`라고 옵션을 별도로 주어야 합니다. 개인적으로 자주 사용하는 명령어는 마이그레이션을 롤백하고 다시 실행하면서 시딩까지 하는 형태로, `php artisan migrate:refresh -seed`입니다.
+
+여기까지 마이그레이션으로 테이블을 생성하고, 모델 팩토리와 시딩을 통해 데이터를 심는 것까지 해보았습니다. 이 과정은 한 번만 하고 끝나는 것이 아니라 커뮤니티를 만들 때 내용만 약간 다를 뿐 똑같은 과정을 거치게 될 예정이므로 설령 이해하지 못했다고 해도 다음번에 또 나오니까 걱정하지 않아도 됩니다. 모델 팩토리와 시딩에서 해야 할 내용은 아직 많이 남아있지만 기본은 여기까지입니다.
+
+#### 쿼리빌더
+
+라라벨에서는 SQL을 하드코드로 작성하지 않고 메서드 체이닝으로 작성할 수 있는 쿼리빌더(Query Builder)를 사용할 수 있습니다. 쿼리빌더를 사용하지 않는다면, PDO(PHP Data Object), 심지어는 특정 벤더에 종속성이 있는 mysqli와 같은 구닥다리 함수를 사용하고 직접 코드상에 SQL을 작성하여 데이터베이스에 요청을 보내야 한다는 사실을 이미 아키텍처 부분에서 살펴본 적이 있을 것입니다. 그에 해당하는 코드를 다시 한번 살펴봅시다. SELECT * FROM users와 같은 SQL을 로직에 하드코드했음을 볼 수 있습니다.
+
+```php
+$pdo = new PDO(...);
+
+$sth = $pdo->prepare("SELECT * FROM users");
+
+if ($sth->execute()) {
+  $users = [];
+
+  while ($user = $sth->fetchObject()) {
+    array_push($users, $user);
+  }
+}
+```
+
+이 코드를 쿼리빌더로 표현하면 단순하지만 똑같은 일을 할 수 있습니다.
+
+```php
+use Illuminate\Support\Facades\DB;
+use App\Models\User;
+
+$users = DB::table('users')->get();
+```
+
+쿼리빌더는 배열을 래핑한 라라벨 컬렉션(Collection)을 반환합니다. 컬렉션은 헬퍼함수 중 하나인 collect()를 사용하여 반환되는 컬렉션이기도 한데, 컬렉션을 사용하면 기존의 array_*로 시작하던 내장함수들을 대체하여 each(), map(), reduce()와 같인 함수형 프로그래밍(FP, Functional Programming)에서 자주 사용하던 방식을 사용하여 컬렉션을 처리할 수 있습니다. 함수형 프로그래밍은 주제를 벗어나므로 생략하겠지만 프로젝트에서는 일부 사용됩니다. 컬렉션에서 지원하는 함수들을 종류가 정말 많으므로 [공식문서](https://laravel.com/docs/10.x/collections) 참고를 권합니다.
+
+쿼리빌더 사용법을 간단하게 알아봅시다. DB::table()을 사용하여 테이블을 지정한 것을 볼 수 있고, 이 이후부터는 메서드 체이닝을 통해 다양한 메서드를 사용할 수 있습니다. 간단하게 어떤 메서드들이 있는지 살펴봅시다. 기본적인 SQL이 그렇듯이 조회(Select)와 관련된 내용이 가장 많습니다. 메서드가 많기 때문에 쿼리빌더에 대한 [공식문서](https://laravel.com/docs/10.x/queries)를 살펴보고, 더 알아보고자 한다면 API 문서도 참고합시다.
+
+```php
+use Illuminate\Support\Facades\DB;
+
+DB::table('users')->get();
+DB::table('users')->select('name', 'email as user_email')->get();
+DB::table('users')->where('id', '=', 1)->first();
+DB::table('users')->orderBy('id', 'desc')->get();
+DB::table('users')->find(1); // ID
+DB::table('users')->count();
+DB::table('users')->where('id', 1)->exists();
+
+// Raw SQL
+DB::table('users')->select(DB::raw('count(*) as user_count'))->get();
+DB::table('users')->selectRaw('count(*) as user_count')->get();
+
+// Join
+p.116
+```
 
 
 ## 커뮤니티
